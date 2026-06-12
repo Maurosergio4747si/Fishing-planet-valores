@@ -231,7 +231,7 @@ export default function App() {
       <main className="flex-1 flex overflow-y-auto md:overflow-hidden flex-col md:flex-row relative">
         
         {confirmModal && (
-          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-teal-100 flex flex-col gap-4">
               <div className="flex gap-3">
                 <Info className="w-5 h-5 text-teal-600 shrink-0" />
@@ -256,7 +256,7 @@ export default function App() {
         )}
         
         {errorMessage && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-2xl px-4">
             <div className="bg-red-50 text-red-600 p-4 rounded-xl shadow-lg border border-red-200 flex justify-between items-start">
               <div>
                 <p className="font-bold text-sm">Aviso do Sistema</p>
