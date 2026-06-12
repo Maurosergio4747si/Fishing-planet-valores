@@ -63,7 +63,7 @@ export default function App() {
     localStorage.setItem('fp_capturas_live', JSON.stringify(capturasLive));
   }, [capturasLive]);
   
-  const [viewMode, setViewMode] = useState<'locais' | 'top_valor' | 'top_xp' | 'calculadora' | 'analise_eficiencia'>('locais');
+  const [viewMode, setViewMode] = useState<'locais' | 'top_valor' | 'top_xp' | 'calculadora' | 'analise_eficiencia' | 'farming_assist'>('locais');
   
   const [historicoPesos, setHistoricoPesos] = useState<Record<number, number[]>>(() => {
     try {
@@ -85,9 +85,23 @@ export default function App() {
 
   const [filtroLocalAnalise, setFiltroLocalAnalise] = useState<string>('');
   const [searchAnalise, setSearchAnalise] = useState<string>('');
+  const [sortByAnalise, setSortByAnalise] = useState<'valor_tempo' | 'xp_tempo' | 'valor_kg' | 'xp_kg' | 'esforco' | 'nome'>('valor_tempo');
+  const [sortOrderAnalise, setSortOrderAnalise] = useState<'asc' | 'desc'>('desc');
   const [submittingLocal, setSubmittingLocal] = useState(false);
   const [submittingPeixe, setSubmittingPeixe] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const [assistObjective, setAssistObjective] = useState<'money' | 'xp' | 'balanced'>('money');
+  const [sacosPorDia, setSacosPorDia] = useState<number>(2);
+  const [considerarCustos, setConsiderarCustos] = useState<boolean>(true);
+  const [custosLocais, setCustosLocais] = useState<Record<number, { viagem: number; diaria: number }>>(() => {
+    try {
+      const saved = localStorage.getItem('fp_custos_locais');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
 
   useEffect(() => {
     if (supabase) {
@@ -531,6 +545,12 @@ export default function App() {
             >
               📈 Análise de Eficiência (Velocidade)
             </button>
+            <button 
+              onClick={() => setViewMode('farming_assist')} 
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${viewMode === 'farming_assist' ? 'border-teal-600 text-teal-850' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              🧭 Rotas de Farm & Progresso
+            </button>
           </div>
 
           {loading ? (
@@ -887,6 +907,17 @@ export default function App() {
                                       valor: p.valor_kg * pesoNum,
                                       xp: (p.xp_kg || 0) * pesoNum
                                     }]);
+
+                                    setHistoricoPesos(prev => {
+                                      const listaAtual = prev[p.id] || [];
+                                      const novoHistorico = {
+                                        ...prev,
+                                        [p.id]: [...listaAtual, pesoNum]
+                                      };
+                                      localStorage.setItem('fp_historico_pesos', JSON.stringify(novoHistorico));
+                                      return novoHistorico;
+                                    });
+
                                     setCalcPeso('');
                                   }
                                 }
@@ -1149,7 +1180,7 @@ export default function App() {
                     </div>
 
                     {/* Filters Bar */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <div>
                         <label className="block text-xs text-slate-500 mb-1 font-bold">Buscar por Nome</label>
                         <div className="relative">
@@ -1165,11 +1196,11 @@ export default function App() {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1 font-bold">Filtrar por Local de Pesca</label>
+                        <label className="block text-xs text-slate-500 mb-1 font-bold">Filtrar por Local</label>
                         <select 
                           value={filtroLocalAnalise}
                           onChange={e => setFiltroLocalAnalise(e.target.value)}
-                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500 text-slate-700"
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500 text-slate-700 font-medium"
                         >
                           <option value="">Todos os Locais</option>
                           {locais.map(loc => (
@@ -1179,14 +1210,42 @@ export default function App() {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1 font-bold" title="Defina o tamanho do Saco de Pesca na aba Calculadora de Viagem">Capacidade do Saco (kg)</label>
+                        <label className="block text-xs text-slate-500 mb-1 font-bold text-teal-800">Ordenar por</label>
+                        <select 
+                          value={sortByAnalise}
+                          onChange={e => setSortByAnalise(e.target.value as any)}
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500 text-slate-700 font-semibold text-teal-600"
+                        >
+                          <option value="valor_tempo">💰 Dinheiro / Tempo (R$ por peixe)</option>
+                          <option value="xp_tempo">💡 XP / Tempo (XP por peixe)</option>
+                          <option value="valor_kg">💵 Valor por kg (R$/kg)</option>
+                          <option value="xp_kg">🎖️ XP por kg (XP/kg)</option>
+                          <option value="esforco">⏳ Esforço (Nº de peixes p/ saco)</option>
+                          <option value="nome">🐟 Nome da espécie</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1 font-bold">Ordem</label>
+                        <select 
+                          value={sortOrderAnalise}
+                          onChange={e => setSortOrderAnalise(e.target.value as any)}
+                          className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500 text-slate-700 font-medium"
+                        >
+                          <option value="desc">Decrescente (Maior ➔ Menor)</option>
+                          <option value="asc">Crescente (Menor ➔ Maior)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1 font-bold" title="Defina o tamanho do Saco de Pesca na aba Calculadora de Viagem">Capacidade Saco (kg)</label>
                         <input 
                           type="number" 
-                          className="w-full px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-700 font-semibold pointer-events-none"
+                          className="w-full px-3 py-1.5 bg-slate-100 border border-slate-250 rounded-lg text-sm text-slate-700 font-bold pointer-events-none"
                           value={calcBagCapacity}
                           disabled
                         />
-                        <span className="text-[10px] text-slate-400">Sincronizado de forma inteligente com a Calculadora</span>
+                        <span className="text-[9px] text-slate-400 mt-0.5 block font-medium">Sincronizado c/ Calculadora</span>
                       </div>
                     </div>
 
@@ -1264,6 +1323,39 @@ export default function App() {
                          .sort((a, b) => b.xpPerCatch - a.xpPerCatch)
                          .slice(0, 5);
 
+                       // Sorting active fish items for the table main body
+                       const sortedFishAnalise = [...fishAnalise].sort((a, b) => {
+                         let compare = 0;
+                         if (sortByAnalise === 'valor_tempo') {
+                           compare = a.valorPerCatch - b.valorPerCatch;
+                         } else if (sortByAnalise === 'xp_tempo') {
+                           compare = a.xpPerCatch - b.xpPerCatch;
+                         } else if (sortByAnalise === 'valor_kg') {
+                           compare = a.valor_kg - b.valor_kg;
+                         } else if (sortByAnalise === 'xp_kg') {
+                           compare = (a.xp_kg || 0) - (b.xp_kg || 0);
+                         } else if (sortByAnalise === 'esforco') {
+                           compare = a.catchesToFill - b.catchesToFill;
+                         } else {
+                           compare = a.nome.localeCompare(b.nome);
+                         }
+                         return sortOrderAnalise === 'desc' ? -compare : compare;
+                       });
+
+                       const renderSortIcon = (field: typeof sortByAnalise) => {
+                         if (sortByAnalise !== field) return " ↕️";
+                         return sortOrderAnalise === 'desc' ? " ⬇️" : " ⬆️";
+                       };
+
+                       const toggleSort = (field: typeof sortByAnalise) => {
+                         if (sortByAnalise === field) {
+                           setSortOrderAnalise(prev => prev === 'desc' ? 'asc' : 'desc');
+                         } else {
+                           setSortByAnalise(field);
+                           setSortOrderAnalise('desc');
+                         }
+                       };
+
                        return (
                          <div className="space-y-8">
                            {/* Speed Leaderboards */}
@@ -1339,17 +1431,45 @@ export default function App() {
                              <div className="overflow-x-auto">
                                <table className="w-full text-left border-collapse">
                                  <thead>
-                                   <tr className="bg-slate-50/50 text-slate-500 text-[10px] uppercase font-bold tracking-wider border-b border-slate-100">
-                                     <th className="px-6 py-3">Espécie de Peixe / Local</th>
+                                   <tr className="bg-slate-50/50 text-slate-500 text-[10px] uppercase font-bold tracking-wider border-b border-slate-100 select-none">
+                                     <th 
+                                        onClick={() => toggleSort('nome')}
+                                        className="px-6 py-3 cursor-pointer hover:bg-slate-150 hover:text-slate-900 transition-colors"
+                                      >
+                                        Espécie de Peixe / Local {renderSortIcon('nome')}
+                                      </th>
                                      <th className="px-6 py-3 w-40">Peso Médio Ativo (kg)</th>
-                                     <th className="px-6 py-3">Rendimento Base / kg</th>
-                                     <th className="px-6 py-3">Esforço para Lotação</th>
-                                     <th className="px-6 py-3">Unidade R$ e XP (Rápido)</th>
+                                     <th 
+                                        onClick={() => {
+                                          if (sortByAnalise === 'valor_kg') toggleSort('xp_kg');
+                                          else toggleSort('valor_kg');
+                                        }}
+                                        className="px-6 py-3 cursor-pointer hover:bg-slate-150 hover:text-slate-900 transition-colors"
+                                        title="Clique para alternar ordenação por R$/kg ou XP/kg"
+                                      >
+                                        Rendimento Base / kg {renderSortIcon(sortByAnalise === 'xp_kg' ? 'xp_kg' : 'valor_kg')}
+                                      </th>
+                                     <th 
+                                        onClick={() => toggleSort('esforco')}
+                                        className="px-6 py-3 cursor-pointer hover:bg-slate-150 hover:text-slate-900 transition-colors"
+                                      >
+                                        Esforço para Lotação {renderSortIcon('esforco')}
+                                      </th>
+                                     <th 
+                                        onClick={() => {
+                                          if (sortByAnalise === 'valor_tempo') toggleSort('xp_tempo');
+                                          else toggleSort('valor_tempo');
+                                        }}
+                                        className="px-6 py-3 cursor-pointer hover:bg-slate-150 hover:text-slate-900 transition-colors"
+                                        title="Clique para alternar ordenação por R$/Captura ou XP/Captura"
+                                      >
+                                        Unidade R$ e XP (Rápido) {renderSortIcon(sortByAnalise === 'xp_tempo' ? 'xp_tempo' : 'valor_tempo')}
+                                      </th>
                                      <th className="px-6 py-3 text-right">Potencial Saco Cheio</th>
                                    </tr>
                                  </thead>
                                  <tbody className="divide-y divide-slate-100 text-sm">
-                                   {fishAnalise.map(p => {
+                                   {sortedFishAnalise.map(p => {
                                      return (
                                        <tr key={p.id} className="hover:bg-slate-50/35 transition-colors">
                                          {/* Local / Nome */}
