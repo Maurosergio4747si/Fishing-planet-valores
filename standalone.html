@@ -423,6 +423,7 @@
         // Eventos e Operações CRUD (Create, Update, Delete)
         // ==========================================
         window.editLocal = (id, nome) => {
+            if (!confirm('Você realmente deseja editar este local?')) return;
             editingLocalId = id;
             inputLocal.value = nome;
             btnLocal.textContent = 'Atualizar Local';
@@ -439,10 +440,11 @@
         };
 
         window.deleteLocal = async (id) => {
-            if (!confirm('Tem certeza? Isso excluirá o local e todos os peixes dele.')) return;
+            if (!confirm('Você realmente deseja excluir este local? Isso excluirá todos os peixes dele também.')) return;
             try {
-                const { error } = await supabase.from('locais_pesca').delete().eq('id', id);
+                const { data, error } = await supabase.from('locais_pesca').delete().eq('id', id).select();
                 if (error) showError('Erro ao excluir: ' + error.message);
+                else if (!data || data.length === 0) showError('Aviso: Nenhum local excluído. Verifique o RLS do Supabase.');
                 else fetchDados();
             } catch (err) {
                 showError('Exceção: ' + err.message);
@@ -450,6 +452,7 @@
         };
 
         window.editPeixe = (id, local_id, nome, valor_kg, raridade, xp_kg) => {
+            if (!confirm('Você realmente deseja editar este peixe?')) return;
             editingPeixeId = id;
             selectLocal.value = local_id;
             inputPeixe.value = nome;
@@ -475,10 +478,11 @@
         };
 
         window.deletePeixe = async (id) => {
-            if (!confirm('Tem certeza que deseja excluir este peixe?')) return;
+            if (!confirm('Você realmente deseja excluir este peixe?')) return;
             try {
-                const { error } = await supabase.from('peixes').delete().eq('id', id);
+                const { data, error } = await supabase.from('peixes').delete().eq('id', id).select();
                 if (error) showError('Erro ao excluir: ' + error.message);
+                else if (!data || data.length === 0) showError('Aviso: Nenhum peixe excluído. Verifique o RLS do Supabase.');
                 else fetchDados();
             } catch (err) {
                 showError('Exceção: ' + err.message);
@@ -494,15 +498,18 @@
 
             try {
                 let error;
+                let isRlsBlocked = false;
                 if (editingLocalId) {
-                    const res = await supabase.from('locais_pesca').update({ nome: inputLocal.value }).eq('id', editingLocalId);
+                    const res = await supabase.from('locais_pesca').update({ nome: inputLocal.value }).eq('id', editingLocalId).select();
                     error = res.error;
+                    if (!error && (!res.data || res.data.length === 0)) isRlsBlocked = true;
                 } else {
                     const res = await supabase.from('locais_pesca').insert([{ nome: inputLocal.value }]);
                     error = res.error;
                 }
                 
                 if (error) showError('Erro: ' + error.message);
+                else if (isRlsBlocked) showError('Aviso: Nenhuma linha editada. Verifique o RLS do Supabase.');
                 else {
                     cancelEditLocal();
                     await fetchDados();
@@ -532,15 +539,18 @@
                 };
 
                 let error;
+                let isRlsBlocked = false;
                 if (editingPeixeId) {
-                    const res = await supabase.from('peixes').update(payload).eq('id', editingPeixeId);
+                    const res = await supabase.from('peixes').update(payload).eq('id', editingPeixeId).select();
                     error = res.error;
+                    if (!error && (!res.data || res.data.length === 0)) isRlsBlocked = true;
                 } else {
                     const res = await supabase.from('peixes').insert([payload]);
                     error = res.error;
                 }
                 
                 if (error) showError('Erro: ' + error.message);
+                else if (isRlsBlocked) showError('Aviso: Nenhum peixe editado. Verifique o RLS do Supabase.');
                 else {
                     cancelEditPeixe();
                     await fetchDados();

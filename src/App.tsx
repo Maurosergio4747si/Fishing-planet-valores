@@ -20,6 +20,7 @@ export default function App() {
   
   const [editingLocal, setEditingLocal] = useState<{id: number, nome: string} | null>(null);
   const [editingPeixeId, setEditingPeixeId] = useState<number | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, message: string, onConfirm: () => void } | null>(null);
   
   const [viewMode, setViewMode] = useState<'locais' | 'top_valor' | 'top_xp'>('locais');
   const [submittingLocal, setSubmittingLocal] = useState(false);
@@ -88,13 +89,15 @@ export default function App() {
     setSubmittingLocal(true);
     try {
       if (editingLocal) {
-        const { error } = await supabase.from('locais_pesca').update({ nome: novoLocalForm }).eq('id', editingLocal.id);
-        if (!error) {
+        const { data, error } = await supabase.from('locais_pesca').update({ nome: novoLocalForm }).eq('id', editingLocal.id).select();
+        if (error) {
+          setErrorMessage('Erro ao atualizar local: ' + error.message);
+        } else if (!data || data.length === 0) {
+          setErrorMessage('Aviso: Nenhuma linha alterada. O RLS do Supabase pode estar bloqueando atualizações (Update).');
+        } else {
           setNovoLocalForm('');
           setEditingLocal(null);
           fetchLocais();
-        } else {
-          setErrorMessage('Erro ao atualizar local: ' + error.message);
         }
       } else {
         const { error } = await supabase.from('locais_pesca').insert([{ nome: novoLocalForm }]);
@@ -112,10 +115,11 @@ export default function App() {
   };
 
   const handleDeleteLocal = async (id: number) => {
-    if (!supabase || !window.confirm('Tem certeza? Isso excluirá o local e todos os peixes dele.')) return;
+    if (!supabase) return;
     try {
-      const { error } = await supabase.from('locais_pesca').delete().eq('id', id);
+      const { data, error } = await supabase.from('locais_pesca').delete().eq('id', id).select();
       if (error) setErrorMessage('Erro ao excluir local: ' + error.message);
+      else if (!data || data.length === 0) setErrorMessage('Aviso: Nenhuma linha excluída. O RLS do Supabase pode estar bloqueando exclusões (Delete).');
       else fetchLocais();
     } catch (err: any) {
       setErrorMessage(`Exceção: ${err.message}`);
@@ -138,13 +142,15 @@ export default function App() {
       };
 
       if (editingPeixeId) {
-        const { error } = await supabase.from('peixes').update(payload).eq('id', editingPeixeId);
-        if (!error) {
+        const { data, error } = await supabase.from('peixes').update(payload).eq('id', editingPeixeId).select();
+        if (error) {
+          setErrorMessage('Erro ao atualizar peixe: ' + error.message);
+        } else if (!data || data.length === 0) {
+          setErrorMessage('Aviso: Nenhum peixe alterado. O RLS do Supabase pode estar bloqueando atualizações.');
+        } else {
           setNovoPeixeForm({ local_id: '', nome: '', valor_kg: '', raridade: 'comum', xp_kg: '' });
           setEditingPeixeId(null);
           fetchPeixes();
-        } else {
-          setErrorMessage('Erro ao atualizar peixe: ' + error.message);
         }
       } else {
         const { error } = await supabase.from('peixes').insert([payload]);
@@ -162,10 +168,11 @@ export default function App() {
   };
 
   const handleDeletePeixe = async (id: number) => {
-    if (!supabase || !window.confirm('Tem certeza que deseja excluir este peixe?')) return;
+    if (!supabase) return;
     try {
-      const { error } = await supabase.from('peixes').delete().eq('id', id);
+      const { data, error } = await supabase.from('peixes').delete().eq('id', id).select();
       if (error) setErrorMessage('Erro ao excluir peixe: ' + error.message);
+      else if (!data || data.length === 0) setErrorMessage('Aviso: Nenhum peixe excluído. O RLS do Supabase pode estar bloqueando exclusões.');
       else fetchPeixes();
     } catch (err: any) {
       setErrorMessage(`Exceção: ${err.message}`);
@@ -222,6 +229,31 @@ export default function App() {
 
       {/* Main Content Layout */}
       <main className="flex-1 flex overflow-y-auto md:overflow-hidden flex-col md:flex-row relative">
+        
+        {confirmModal && (
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-teal-100 flex flex-col gap-4">
+              <div className="flex gap-3">
+                <Info className="w-5 h-5 text-teal-600 shrink-0" />
+                <p className="text-slate-800 flex-1">{confirmModal.message}</p>
+              </div>
+              <div className="flex gap-3 justify-end mt-2">
+                <button 
+                  onClick={() => setConfirmModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={confirmModal.onConfirm}
+                  className="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-sm"
+                >
+                  Sim, prosseguir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {errorMessage && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
@@ -454,11 +486,30 @@ export default function App() {
                         </span>
                         <div className="flex gap-2">
                           <button 
-                            onClick={() => { setEditingLocal({id: local.id, nome: local.nome}); setNovoLocalForm(local.nome); }} 
+                            onClick={() => { 
+                              setConfirmModal({
+                                isOpen: true,
+                                message: "Você realmente deseja editar este local?",
+                                onConfirm: () => {
+                                  setEditingLocal({id: local.id, nome: local.nome}); 
+                                  setNovoLocalForm(local.nome); 
+                                  setConfirmModal(null);
+                                }
+                              });
+                            }} 
                             className="text-teal-600 hover:text-teal-800 text-xs font-medium cursor-pointer"
                           >Editar</button>
                           <button 
-                            onClick={() => handleDeleteLocal(local.id)} 
+                            onClick={() => {
+                              setConfirmModal({
+                                isOpen: true,
+                                message: "Você realmente deseja excluir este local? Isso excluirá todos os peixes dele também.",
+                                onConfirm: () => {
+                                  handleDeleteLocal(local.id);
+                                  setConfirmModal(null);
+                                }
+                              });
+                            }} 
                             className="text-red-500 hover:text-red-700 text-xs font-medium cursor-pointer"
                           >Excluir</button>
                         </div>
@@ -501,22 +552,38 @@ export default function App() {
                                     <div className="flex gap-3 justify-end">
                                       <button 
                                         onClick={() => {
-                                          setEditingPeixeId(peixe.id);
-                                          setNovoPeixeForm({
-                                            local_id: peixe.local_id.toString(),
-                                            nome: peixe.nome,
-                                            valor_kg: peixe.valor_kg.toString(),
-                                            raridade: peixe.raridade as import('./types').Raridade,
-                                            xp_kg: (peixe.xp_kg || 0).toString()
+                                          setConfirmModal({
+                                            isOpen: true,
+                                            message: "Você realmente deseja editar este peixe?",
+                                            onConfirm: () => {
+                                              setEditingPeixeId(peixe.id);
+                                              setNovoPeixeForm({
+                                                local_id: peixe.local_id.toString(),
+                                                nome: peixe.nome,
+                                                valor_kg: peixe.valor_kg.toString(),
+                                                raridade: peixe.raridade as import('./types').Raridade,
+                                                xp_kg: (peixe.xp_kg || 0).toString()
+                                              });
+                                              setViewMode('locais');
+                                              setConfirmModal(null);
+                                            }
                                           });
-                                          setViewMode('locais');
                                         }}
                                         className="text-teal-600 hover:text-teal-800 transition-colors text-xs font-medium cursor-pointer"
                                       >
                                         Editar
                                       </button>
                                       <button 
-                                        onClick={() => handleDeletePeixe(peixe.id)}
+                                        onClick={() => {
+                                          setConfirmModal({
+                                            isOpen: true,
+                                            message: "Você realmente deseja excluir este peixe?",
+                                            onConfirm: () => {
+                                              handleDeletePeixe(peixe.id);
+                                              setConfirmModal(null);
+                                            }
+                                          });
+                                        }}
                                         className="text-red-500 hover:text-red-700 transition-colors text-xs font-medium cursor-pointer"
                                       >
                                         Excluir
